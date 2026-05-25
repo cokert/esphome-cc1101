@@ -3,7 +3,7 @@ import esphome.config_validation as cv
 from esphome.components import remote_transmitter
 from esphome.const import CONF_ID
 
-DEPENDENCIES = ["remote_transmitter"]
+DEPENDENCIES = ["remote_transmitter", "spi"]
 
 cc1101_ns = cg.esphome_ns.namespace("cc1101")
 CC1101Component = cc1101_ns.class_("CC1101", cg.Component)
