@@ -10,7 +10,7 @@
 #pragma once
 
 #include "esphome/core/component.h"
-#include "ELECHOUSE_CC1101_SRC_DRV.h"
+#include <SmartRC_CC1101.h>
 
 namespace esphome {
 namespace cc1101_smartrc {
