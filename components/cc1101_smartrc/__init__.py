@@ -39,4 +39,4 @@ async def to_code(config):
     )
     await cg.register_component(var, config)
     cg.add_library("SPI", None)
-    cg.add_library("SmartRC-CC1101-Driver-Lib", None)
+    cg.add_library("lsatan/SmartRC-CC1101-Driver-Lib", None)
