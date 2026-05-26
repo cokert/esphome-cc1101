@@ -170,14 +170,24 @@ class CC1101 : public Component,
     reset();
     ESP_LOGD(TAG, "reset() done");
 
-    // Verify SPI by reading chip version (should be 0x14)
-    uint8_t ver = read_status(0x31);
-    ESP_LOGI(TAG, "Chip version register: 0x%02X (expect 0x14)", ver);
-    if (ver == 0xFF || ver == 0x00) {
-      ESP_LOGE(TAG, "SPI communication failed — check wiring. Aborting setup.");
-      this->mark_failed();
-      return;
+    // Read IOCFG2 (config reg 0x00) before writing — default is 0x29.
+    // Config registers use READ_SINGLE (0x80 | addr), status registers use READ_BURST (0xC0 | addr).
+    // This tells us if the SPI path itself works before we touch status registers.
+    {
+      this->enable();
+      this->transfer_byte(0x80 | 0x00);  // READ_SINGLE of IOCFG2
+      uint8_t iocfg2_pre = this->transfer_byte(0x00);
+      this->disable();
+      ESP_LOGI(TAG, "IOCFG2 before write: 0x%02X (default 0x29 = SPI working, 0x00/0xFF = broken)", iocfg2_pre);
     }
+
+    // Read chip version status register (0x31, needs READ_BURST / 0xC0 flag).
+    uint8_t ver = read_status(0x31);
+    ESP_LOGI(TAG, "VERSION status reg: 0x%02X (expect 0x14, 0x04 also valid)", ver);
+
+    // Read PARTNUM status register (0x30) — should be 0x00 for CC1101.
+    uint8_t pn = read_status(0x30);
+    ESP_LOGI(TAG, "PARTNUM status reg: 0x%02X (expect 0x00)", pn);
 
     // ASK/OOK async serial mode — register values from SmartRC RegConfigSettings()
     // + setCCMode(false) + setModulation(OOK)
