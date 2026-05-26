@@ -18,8 +18,11 @@
 #pragma once
 
 #include "esphome/core/component.h"
+#include "esphome/core/log.h"
 #include "esphome/components/spi/spi.h"
 #include <math.h>
+
+static const char *const TAG = "cc1101_smartrc";
 
 namespace esphome {
 namespace cc1101_smartrc {
@@ -148,15 +151,39 @@ class CC1101 : public Component,
   CC1101(float bandwidth_khz, float freq_mhz)
       : bandwidth_khz_(bandwidth_khz), freq_mhz_(freq_mhz) {}
 
+  void dump_config() override {
+    uint8_t ver = read_status(0x31);  // CC1101_VERSION status register
+    ESP_LOGCONFIG(TAG, "CC1101 SmartRC:");
+    ESP_LOGCONFIG(TAG, "  Chip version: 0x%02X (expect 0x14)", ver);
+    ESP_LOGCONFIG(TAG, "  Frequency: %.3f MHz", freq_mhz_);
+    ESP_LOGCONFIG(TAG, "  Bandwidth: %.0f kHz", bandwidth_khz_);
+    if (ver == 0xFF || ver == 0x00) {
+      ESP_LOGE(TAG, "  SPI communication failed — check wiring");
+    }
+  }
+
   void setup() override {
+    ESP_LOGD(TAG, "setup() start");
     this->spi_setup();
+    ESP_LOGD(TAG, "spi_setup() done");
+
     reset();
+    ESP_LOGD(TAG, "reset() done");
+
+    // Verify SPI by reading chip version (should be 0x14)
+    uint8_t ver = read_status(0x31);
+    ESP_LOGI(TAG, "Chip version register: 0x%02X (expect 0x14)", ver);
+    if (ver == 0xFF || ver == 0x00) {
+      ESP_LOGE(TAG, "SPI communication failed — check wiring. Aborting setup.");
+      this->mark_failed();
+      return;
+    }
 
     // ASK/OOK async serial mode — register values from SmartRC RegConfigSettings()
     // + setCCMode(false) + setModulation(OOK)
     write_reg(R_FSCTRL1,  0x06);
-    write_reg(R_IOCFG2,   0x0D);  // GDO2: async serial data output
-    write_reg(R_IOCFG0,   0x0D);  // GDO0: async serial data output
+    write_reg(R_IOCFG2,   0x0D);  // GDO2: async serial data output (RX data → GPIO3)
+    write_reg(R_IOCFG0,   0x0D);  // GDO0: async serial data input (TX data ← GPIO4)
     write_reg(R_PKTCTRL0, 0x32);  // async serial mode, no whitening
     write_reg(R_MDMCFG3,  0x93);
     write_reg(R_MDMCFG4,  0x07);
@@ -184,15 +211,33 @@ class CC1101 : public Component,
     write_reg(R_PKTCTRL1, 0x04);
     write_reg(R_ADDR,     0x00);
     write_reg(R_PKTLEN,   0x00);
+    ESP_LOGD(TAG, "register config done");
+
+    // Verify a written register reads back correctly
+    uint8_t iocfg2 = read_status(R_IOCFG2);
+    ESP_LOGD(TAG, "IOCFG2 readback: 0x%02X (expect 0x0D)", iocfg2);
 
     // PA table: OOK at 300-348 MHz → ~12 dBm (PA_TABLE_315[7] = 0xC2)
     // OOK uses index 0 for off, index 1 for on
     static const uint8_t pa[8] = {0x00, 0xC2, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     write_burst(R_PATABLE, pa, 8);
+    ESP_LOGD(TAG, "PA table written");
 
     set_rx_bw(bandwidth_khz_);
+    ESP_LOGD(TAG, "RX bandwidth set: %.0f kHz", bandwidth_khz_);
+
     set_mhz(freq_mhz_);
+    ESP_LOGD(TAG, "Frequency set: %.3f MHz", freq_mhz_);
+
+    // Read MARCSTATE to confirm chip is in RX mode (expect 0x0D = RX)
+    uint8_t marc = read_status(0x35);
+    ESP_LOGI(TAG, "MARCSTATE after SetRx: 0x%02X (expect 0x0D = RX)", marc);
+
     set_rx();
+    marc = read_status(0x35);
+    ESP_LOGI(TAG, "MARCSTATE final: 0x%02X (0x0D = RX, 0x01 = IDLE)", marc);
+
+    ESP_LOGI(TAG, "setup() complete");
   }
 
   void set_mhz(float mhz) {
@@ -228,13 +273,19 @@ class CC1101 : public Component,
   // Called from remote_transmitter on_transmit.
   // remote_transmitter owns GPIO4 and manages pin direction — we just switch the chip mode.
   void beginTransmission() {
+    ESP_LOGD(TAG, "beginTransmission() → SetTx");
     set_tx();
+    uint8_t marc = read_status(0x35);
+    ESP_LOGD(TAG, "MARCSTATE after SetTx: 0x%02X (expect 0x13 = TX)", marc);
   }
 
   // Called from remote_transmitter on_complete.
   void endTransmission() {
+    ESP_LOGD(TAG, "endTransmission() → SetRx");
     set_rx();
     set_rx();  // twice — CC1101 quirk, see dev-diary.md
+    uint8_t marc = read_status(0x35);
+    ESP_LOGD(TAG, "MARCSTATE after SetRx: 0x%02X (expect 0x0D = RX)", marc);
   }
 };
 
