@@ -81,7 +81,6 @@ class CC1101 : public Component,
                                      spi::CLOCK_PHASE_LEADING,
                                      spi::DATA_RATE_4MHZ> {
  protected:
-  int gdo0_;
   float bandwidth_khz_, freq_mhz_;
 
   // --- SPI primitives ---
@@ -146,13 +145,11 @@ class CC1101 : public Component,
   }
 
  public:
-  CC1101(int gdo0, float bandwidth_khz, float freq_mhz)
-      : gdo0_(gdo0), bandwidth_khz_(bandwidth_khz), freq_mhz_(freq_mhz) {}
+  CC1101(float bandwidth_khz, float freq_mhz)
+      : bandwidth_khz_(bandwidth_khz), freq_mhz_(freq_mhz) {}
 
   void setup() override {
     this->spi_setup();
-    pinMode(gdo0_, INPUT);
-
     reset();
 
     // ASK/OOK async serial mode — register values from SmartRC RegConfigSettings()
@@ -228,16 +225,14 @@ class CC1101 : public Component,
     strobe(S_STX);
   }
 
-  // Called from remote_transmitter on_transmit
+  // Called from remote_transmitter on_transmit.
+  // remote_transmitter owns GPIO4 and manages pin direction — we just switch the chip mode.
   void beginTransmission() {
     set_tx();
-    pinMode(gdo0_, OUTPUT);
   }
 
-  // Called from remote_transmitter on_complete
+  // Called from remote_transmitter on_complete.
   void endTransmission() {
-    digitalWrite(gdo0_, LOW);
-    pinMode(gdo0_, INPUT);
     set_rx();
     set_rx();  // twice — CC1101 quirk, see dev-diary.md
   }

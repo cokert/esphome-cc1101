@@ -17,7 +17,6 @@ CONFIG_SCHEMA = (
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(CC1101Component),
-            cv.Required("gdo0_pin"): cv.int_,
             cv.Required("bandwidth"): cv.float_,
             cv.Required("frequency"): cv.float_,
         }
@@ -30,7 +29,6 @@ CONFIG_SCHEMA = (
 async def to_code(config):
     var = cg.new_Pvariable(
         config[CONF_ID],
-        config["gdo0_pin"],
         config["bandwidth"],
         config["frequency"],
     )
